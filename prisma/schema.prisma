@@ -1,0 +1,416 @@
+// LUMEN — Cinematographer Portfolio & Marketing Platform
+// Prisma schema (SQLite). Complex/list fields are stored as JSON strings
+// and (de)serialized in the application layer.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Admin user. Authenticated via NextAuth Credentials provider.
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String
+  role          String   @default("ADMIN")
+  image         String?
+  /// Forces a password change on next login (first-run setup wizard).
+  mustChangePassword Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// Portfolio project / film. The heart of the site.
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  category    String   @default("FILM") // FILM | WEDDING | COMMERCIAL | DOCUMENTARY | MUSIC_VIDEO | EVENT | TRAVEL | BRAND
+  client      String?
+  year        Int?
+  location    String?
+  role        String?  // e.g. "Director of Photography"
+  description String
+  excerpt     String?
+  thumbnail   String?
+  thumbnailAlt String? // accessibility/SEO alt text for the thumbnail
+  posterImage String?
+  videoUrl    String?  // embed url (YouTube/Vimeo) or direct mp4
+  gallery     String?  // JSON string[] of image urls
+  tags        String?  // JSON string[]
+  /// JSON array of { image, alt, caption? } — behind-the-scenes gallery shown
+  /// on the project detail page. Richer than the main gallery (which is a
+  /// plain image grid). Each BTS photo can have an optional caption.
+  btsGallery  String?  // JSON { image, alt, caption? }[]
+  featured    Boolean  @default(false)
+  published   Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+  @@index([featured])
+  @@index([published])
+}
+
+/// Service offering (e.g. Cinematography, Aerial, Color Grading).
+model Service {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  icon        String?  // lucide icon name
+  features    String?  // JSON string[]
+  priceFrom   String?
+  order       Int      @default(0)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Client testimonial.
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  role      String?
+  company   String?
+  content   String
+  rating    Int      @default(5)
+  avatar    String?
+  order     Int      @default(0)
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Equipment / gear (cameras, lenses, gimbals, drones, audio, lighting).
+model Gear {
+  id          String   @id @default(cuid())
+  name        String
+  category    String   @default("CAMERA") // CAMERA | LENS | GIMBAL | DRONE | AUDIO | LIGHT | ACCESSORY
+  brand       String?
+  description String?
+  image       String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category])
+}
+
+/// Award / recognition shown in the homepage awards strip.
+model Award {
+  id        String   @id @default(cuid())
+  label     String   // e.g. "Cannes Lions"
+  year      String   // e.g. "2024"
+  note      String?  // e.g. "Shortlist"
+  order     Int      @default(0)
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Newsletter subscriber (collected from the public footer signup form).
+model Subscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Journal / blog post (behind-the-scenes stories).
+model BlogPost {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  excerpt     String?
+  content     String    // markdown
+  coverImage  String?
+  coverImageAlt String? // accessibility/SEO alt text for the cover image
+  tags        String?   // JSON string[]
+  author      String?
+  published   Boolean   @default(true)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+/// Contact / booking inquiry submitted from the public site.
+model Inquiry {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  projectType String?
+  budget      String?
+  eventDate   String?
+  message     String
+  status      String   @default("NEW") // NEW | READ | REPLIED | ARCHIVED
+  /// Admin-starred flag — marks important inquiries for quick recall.
+  starred     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([starred])
+}
+
+/// Admin activity log — audit trail of content edits (creates / updates / deletes / publishes).
+model ActivityLog {
+  id        String   @id @default(cuid())
+  /// "create" | "update" | "delete" | "publish" | "unpublish" | "duplicate" | "auth" | "config"
+  action    String
+  /// Entity affected, e.g. "project" | "service" | "testimonial" | "post" | "gear" | "award" | "inquiry" | "subscriber" | "config" | "auth"
+  entity    String
+  /// Display label of the affected row (title / name / email)
+  label     String?
+  /// Row id of the affected entity (optional — e.g. config has none)
+  entityId  String?
+  /// Short human-friendly summary, e.g. "Created project “Echoes”"
+  summary   String
+  /// Acting user email (denormalised for resilience)
+  actor     String?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([action])
+  @@index([createdAt])
+}
+
+/// Frequently Asked Questions — admin-managed, shown on /services and /about.
+model Faq {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String   // markdown allowed
+  category  String   @default("General")
+  order     Int      @default(0)
+  published Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([published])
+}
+
+/// Behind-the-Scenes process gallery — admin-managed step-by-step storytelling
+/// with optional images. Richer than the static process section. Shown on
+/// /about and optionally on project detail pages.
+model ProcessStep {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  image       String?  // optional BTS photo
+  imageAlt    String?
+  /// Optional label like "Pre-production" / "Shoot day" / "Color grade"
+  phase       String?
+  order       Int      @default(0)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published])
+}
+
+/// Single-row site configuration. Updated from the admin Settings page.
+model SiteConfig {
+  id              String   @id @default("default")
+  siteName        String   @default("LUMEN")
+  siteTagline     String   @default("Cinematography & Visual Storytelling")
+  siteDescription String   @default("")
+  heroTitle       String   @default("")
+  heroSubtitle    String   @default("")
+  heroVideoUrl    String?
+  heroPosterImage String?
+  showreelUrl     String?
+  aboutBio        String   @default("")
+  aboutImage      String?
+  aboutStats      String   @default("[]") // JSON {label,value}[]
+  aboutSkills     String   @default("[]") // JSON string[]
+  contactEmail    String   @default("hello@lumen.studio")
+  contactPhone    String?
+  contactLocation String?
+  contactLat      String?
+  contactLng      String?
+  socialInstagram String?
+  socialYoutube   String?
+  socialVimeo     String?
+  socialLinkedin  String?
+  socialBehance   String?
+  accentColor     String   @default("#E8B547")
+  footerNote      String   @default("")
+  /// JSON FeatureFlags: toggles for premium UX features (cursor, loader, etc.)
+  featureFlags    String   @default("")
+  /// Homepage cinematic banner — admin-selectable "Project of the Month".
+  /// When bannerEnabled is true and bannerProjectId points to a published
+  /// project, the homepage renders a full-width cinematic banner.
+  bannerEnabled   Boolean  @default(false)
+  bannerProjectId String?
+  bannerEyebrow   String   @default("Featured Story")
+  bannerHeadline  String?  // overrides the project title when set
+  bannerCtaLabel  String   @default("View the case study")
+  /// Email-notification settings for new inquiries. All fields nullable so
+  /// the feature is opt-in. When notifyInquiriesEnabled is true + a valid
+  /// SMTP host is set, new inquiry submissions trigger an email.
+  notifyInquiriesEnabled Boolean @default(false)
+  notifyFromEmail String?
+  notifyToEmail   String?
+  smtpHost        String?
+  smtpPort        String?  // string for easy form handling; parsed to int
+  smtpUser        String?
+  smtpPassword    String?
+  /// AI feature settings. When aiEnabled is true + a valid Gemini API key is
+  /// set, the admin can use AI-assist features across the dashboard.
+  aiEnabled       Boolean  @default(false)
+  aiApiKey        String?   // Gemini API key (server-side only — never sent to client)
+  aiModel         String   @default("gemini-2.5-flash")
+  /// Optional custom system-prompt override. When blank, a sensible default is used.
+  aiSystemPrompt  String?
+  updatedAt       DateTime @updatedAt
+}
+
+/// AI usage log — tracks every Gemini API call for usage analytics + rate limiting.
+model AiUsage {
+  id           String   @id @default(cuid())
+  /// Feature that triggered the call: "project-desc" | "inquiry-reply" | "social-posts" | "alt-text" | "blog-outline" | "delivery-email" | "seo-meta" | "testimonial-reply" | "custom"
+  feature      String
+  /// Approximate input token count from Gemini's usageMetadata
+  inputTokens  Int      @default(0)
+  /// Approximate output token count
+  outputTokens Int      @default(0)
+  /// Round-trip duration in ms
+  durationMs   Int      @default(0)
+  /// Acting admin email (denormalised for resilience)
+  actor        String?
+  success      Boolean  @default(true)
+  /// Error message when success=false
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([feature])
+  @@index([createdAt])
+  @@index([actor])
+}
+
+/// Client project delivery management — tracks what's been delivered to each
+/// client per project. Powers the admin delivery manager + public /deliver/[token] page.
+model ProjectDelivery {
+  id          String   @id @default(cuid())
+  projectId   String
+  /// Deliverable type: "MAIN_FILM" | "SOCIAL_CUT" | "RAW_FOOTAGE" | "COLOR_MASTER" | "TRAILER" | "CUSTOM"
+  type        String   @default("MAIN_FILM")
+  /// Display label, e.g. "Cinematic Main Film (4K)"
+  label       String
+  /// URL to the deliverable (Google Drive link, Vimeo password-protected, etc.)
+  url         String?
+  /// "PENDING" | "READY" | "SENT" | "DELIVERED" | "REVISED"
+  status      String   @default("PENDING")
+  /// Client email this was sent to
+  clientEmail String?
+  /// When the deliverable was sent
+  sentAt      DateTime?
+  /// AI-generated delivery email draft (admin can review + copy)
+  aiEmailDraft String?
+  notes       String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+}
+
+/// Delivery access tokens — each project can have a shareable delivery page
+/// at /deliver/[token]. Tokens are opaque cuid strings, revocable by the admin.
+model DeliveryToken {
+  id          String   @id @default(cuid())
+  projectId   String
+  /// The opaque token used in the /deliver/[token] URL
+  token       String   @unique
+  /// Optional passphrase the client must enter to view the delivery page
+  passphrase  String?
+  /// When the token expires (null = never)
+  expiresAt   DateTime?
+  /// When the client last viewed the delivery page
+  lastViewedAt DateTime?
+  viewCount   Int      @default(0)
+  /// Admin-revoked tokens immediately 404 on the public page
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([token])
+}
+
+/// Photo batch — a collection of event photos (e.g. "Wedding — All Photos")
+/// that clients can search via face-match. Photos are stored in S3/local,
+/// face descriptors in SQLite. Face detection runs browser-side (no server CPU).
+model PhotoBatch {
+  id          String   @id @default(cuid())
+  projectId   String?
+  title       String
+  photoCount  Int      @default(0)
+  faceCount   Int      @default(0)
+  /// "UPLOADING" | "PROCESSING" | "READY" | "FAILED"
+  status      String   @default("UPLOADING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+/// Individual photo within a batch. URL points to S3/local storage.
+model PhotoBatchItem {
+  id          String   @id @default(cuid())
+  batchId     String
+  url         String
+  storageKey  String
+  width       Int?
+  height      Int?
+  faceCount   Int      @default(0)
+  processed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([batchId])
+}
+
+/// Face descriptor — tiny (128 floats ≈ 512 bytes). Used for matching.
+/// Extracted browser-side via @vladmandic/face-api, stored server-side.
+model PhotoFace {
+  id          String   @id @default(cuid())
+  photoId     String
+  batchId     String
+  /// JSON array of 128 floats (the face descriptor)
+  descriptor  String
+  x           Float?
+  y           Float?
+  width       Float?
+  height      Float?
+  createdAt   DateTime @default(now())
+
+  @@index([batchId])
+  @@index([photoId])
+}
+
+/// Shareable link for clients to access a photo batch + face-match.
+model PhotoBatchToken {
+  id          String   @id @default(cuid())
+  batchId     String
+  token       String   @unique
+  passphrase  String?
+  expiresAt   DateTime?
+  lastViewedAt DateTime?
+  viewCount   Int      @default(0)
+  matchCount  Int      @default(0)
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([batchId])
+  @@index([token])
+}
